@@ -111,7 +111,7 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
-
+  
   return p;
 }
 
@@ -138,7 +138,7 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
-
+  p->num_sys_calls = 0; //initializing the sys call counter for the first user process
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
@@ -209,8 +209,8 @@ fork(void)
   np->cwd = idup(curproc->cwd);
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
-
   pid = np->pid;
+  np->num_sys_calls=0; //initializing the sys call counter for child process
 
   acquire(&ptable.lock);
 
@@ -532,3 +532,26 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+void print_hello(void){
+  cprintf("Hello from the kernel space\n");
+}
+
+int info(int param){
+  argint(0, &param);
+  if(param == 1){
+    int count = 0;
+    struct proc *p;
+    acquire(&ptable.lock); //lock the process table
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != UNUSED){ // get all the process that are in UNUSED state
+        count++;
+      }
+    }
+    release(&ptable.lock);
+    return count;
+  }
+  else{
+    return -1;
+  }
+} 
