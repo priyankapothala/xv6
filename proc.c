@@ -88,6 +88,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->num_sys_calls=0;
 
   release(&ptable.lock);
 
@@ -138,7 +139,6 @@ userinit(void)
   p->tf->eflags = FL_IF;
   p->tf->esp = PGSIZE;
   p->tf->eip = 0;  // beginning of initcode.S
-  p->num_sys_calls = 0; //initializing the sys call counter for the first user process
   safestrcpy(p->name, "initcode", sizeof(p->name));
   p->cwd = namei("/");
 
@@ -210,7 +210,6 @@ fork(void)
 
   safestrcpy(np->name, curproc->name, sizeof(curproc->name));
   pid = np->pid;
-  np->num_sys_calls=0; //initializing the sys call counter for child process
 
   acquire(&ptable.lock);
 

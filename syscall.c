@@ -137,11 +137,12 @@ syscall(void)
 {
   int num;
   struct proc *curproc = myproc();
-  curproc->num_sys_calls++;
   num = curproc->tf->eax;
+  curproc->num_sys_calls++;
   
   if(num > 0 && num < NELEM(syscalls) && syscalls[num]) {
     curproc->tf->eax = syscalls[num]();
+    
   } else {
     cprintf("%d %s: unknown sys call %d\n",
             curproc->pid, curproc->name, num);
