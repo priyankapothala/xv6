@@ -7,6 +7,18 @@
 #include "proc.h"
 #include "spinlock.h"
 
+#define STRIDE_VAL 10000
+
+
+unsigned short lfsr = 0xACE1u;
+unsigned bit;
+
+unsigned rand()
+{
+  bit  = ((lfsr >> 0) ^ (lfsr >> 2) ^ (lfsr >> 3) ^ (lfsr >> 5) ) & 1;
+  return lfsr =  (lfsr >> 1) | (bit << 15);
+}
+
 struct {
   struct spinlock lock;
   struct proc proc[NPROC];
@@ -89,6 +101,10 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->num_sys_calls=0;
+  p->ticks = 0; //initializing ticks
+  p->tickets = 10; //intializing tickets
+  p->stride = STRIDE_VAL / p->tickets;
+  p->pass = p->stride;
 
   release(&ptable.lock);
 
@@ -318,6 +334,119 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+
+#ifdef STRIDE
+void scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;  
+  //struct proc *p_tmp = c->proc; // candicate to switch
+
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+
+    int min_pass = 9999999;
+    struct proc *selected_proc = ptable.proc;
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+     	if(p->state != RUNNABLE)
+          continue;
+    	if(p->pass < min_pass){
+	      min_pass = p->pass;
+        selected_proc = p; //selecting thE process with the min pass
+	    }
+      
+    }
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      if(p != selected_proc)
+        continue;
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      p->pass += p->stride;
+    
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      p->ticks += 1;
+      swtch(&(c->scheduler), p->context);
+
+      switchkvm();
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+    }
+    release(&ptable.lock);
+  }
+}
+#endif
+
+#ifdef LOTTERY
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    int counter = 0;
+    int total_tickets = 0;
+
+    for(p=ptable.proc; p<&ptable.proc[NPROC];p++)
+    {
+      if(p->state != RUNNABLE)
+        continue;
+      total_tickets += p->tickets;
+    }
+
+    long winning_ticket = rand()%(total_tickets+1);
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      counter += p->tickets;
+      if(counter < winning_ticket){
+        continue;
+      }
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+      p->ticks += 1;
+
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+      break;
+  }
+  release(&ptable.lock);
+  }
+}
+#endif
+
+/*
+//OLD SCHEDULER
+
 void
 scheduler(void)
 {
@@ -352,7 +481,7 @@ scheduler(void)
     release(&ptable.lock);
 
   }
-}
+}*/
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -554,3 +683,20 @@ int info(int param){
     return -1;
   }
 } 
+
+void assign_tickets(int tickets){
+    argint(0, &tickets);
+    struct proc *p = myproc();
+    p->tickets = tickets;
+    p->stride = STRIDE_VAL / p->tickets;
+    p->pass = p->stride;
+}
+
+void process_info(){
+  struct proc *p;
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    if(p->state != UNUSED){ // get all the process that are in UNUSED state
+      cprintf("%s tickets: %d ticks: %d \n",p->name,p->tickets,p->ticks);
+    }
+  }
+}

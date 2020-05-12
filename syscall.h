@@ -22,3 +22,5 @@
 #define SYS_close  21
 #define SYS_hello  22
 #define SYS_info   23
+#define SYS_assign_tickets 24
+#define SYS_process_info 25

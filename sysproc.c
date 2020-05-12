@@ -119,3 +119,20 @@ int sys_info(void){
   }
   return 0;
 }
+
+int sys_assign_tickets(void)
+{
+  int tickets;
+  if(argint(0, &tickets) < 0){
+    return -1;
+  }
+  else{
+    assign_tickets(tickets);
+    return 0;
+  }
+}
+
+int sys_process_info(void){
+  process_info();
+  return 0;
+}
