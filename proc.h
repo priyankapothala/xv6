@@ -54,8 +54,6 @@ struct proc {
   int stride;                  // Stride
   int pass;                    // Pass
   int scheduled_ticks;         // Tick Counter
-  int start_time;
-  int end_time;
 };
 
 // Process memory is laid out contiguously, low addresses first:
