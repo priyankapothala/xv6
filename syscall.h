@@ -23,4 +23,4 @@
 #define SYS_hello  22
 #define SYS_info   23
 #define SYS_assign_tickets 24
-#define SYS_process_info 25
+#define SYS_scheduled_count 25

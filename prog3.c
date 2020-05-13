@@ -16,6 +16,6 @@ int main(int argc, char *argv[])
             asm("nop");
         }
     }
-    process_info();
+    scheduled_count();
     exit(); 
 }

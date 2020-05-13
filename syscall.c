@@ -106,7 +106,7 @@ extern int sys_uptime(void);
 extern int sys_hello(void);
 extern int sys_info(void);
 extern int sys_assign_tickets(void);
-extern int sys_process_info(void);
+extern int sys_scheduled_count(void);
 
 static int (*syscalls[])(void) = {
 [SYS_fork]    sys_fork,
@@ -133,7 +133,7 @@ static int (*syscalls[])(void) = {
 [SYS_hello]   sys_hello,
 [SYS_info]    sys_info,
 [SYS_assign_tickets]    sys_assign_tickets,
-[SYS_process_info] sys_process_info,
+[SYS_scheduled_count] sys_scheduled_count,
 };
 
 void

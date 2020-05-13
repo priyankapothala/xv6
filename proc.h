@@ -53,7 +53,7 @@ struct proc {
   int tickets;                 // Total Tickets
   int stride;                  // Stride
   int pass;                    // Pass
-  int ticks;           // Tick Counter
+  int scheduled_ticks;         // Tick Counter
   int start_time;
   int end_time;
 };

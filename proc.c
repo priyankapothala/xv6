@@ -7,8 +7,11 @@
 #include "proc.h"
 #include "spinlock.h"
 
-#define STRIDE_VAL 10000
-
+#define STRIDE_VAL 6000
+/*
+Random number generator
+Source: https://en.wikipedia.org/wiki/Linear-feedback_shift_register
+*/
 
 unsigned short lfsr = 0xACE1u;
 unsigned bit;
@@ -101,8 +104,8 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
   p->num_sys_calls=0;
-  p->ticks = 0; //initializing ticks
-  p->tickets = 10; //intializing tickets
+  p->scheduled_ticks = 0; //initializing ticks
+  p->tickets = 100000; //intializing tickets
   p->stride = STRIDE_VAL / p->tickets;
   p->pass = p->stride;
 
@@ -334,6 +337,43 @@ wait(void)
 //  - swtch to start running that process
 //  - eventually that process transfers control
 //      via swtch back to the scheduler.
+#ifdef RR
+void
+scheduler(void)
+{
+  struct proc *p;
+  struct cpu *c = mycpu();
+  c->proc = 0;
+  
+  for(;;){
+    // Enable interrupts on this processor.
+    sti();
+
+    // Loop over process table looking for process to run.
+    acquire(&ptable.lock);
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+      if(p->state != RUNNABLE)
+        continue;
+
+      // Switch to chosen process.  It is the process's job
+      // to release ptable.lock and then reacquire it
+      // before jumping back to us.
+      c->proc = p;
+      switchuvm(p);
+      p->state = RUNNING;
+
+      swtch(&(c->scheduler), p->context);
+      switchkvm();
+
+      // Process is done running for now.
+      // It should have changed its p->state before coming back.
+      c->proc = 0;
+    }
+    release(&ptable.lock);
+
+  }
+}
+#endif
 
 #ifdef STRIDE
 void scheduler(void)
@@ -350,36 +390,36 @@ void scheduler(void)
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
 
-    int min_pass = 9999999;
+    int min_pass = 999999;
     struct proc *selected_proc = ptable.proc;
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
      	if(p->state != RUNNABLE)
           continue;
     	if(p->pass < min_pass){
 	      min_pass = p->pass;
-        selected_proc = p; //selecting thE process with the min pass
+        selected_proc = p; //selecting the process with the min pass
 	    }
-      
     }
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
       if(p->state != RUNNABLE)
         continue;
 
-      if(p != selected_proc)
+      if(p != selected_proc) //if p is not the choosen process, continue
         continue;
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-      p->pass += p->stride;
-    
+      p->pass += p->stride; //increment the pass
+      p->scheduled_ticks += 1;
+
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      p->ticks += 1;
-      swtch(&(c->scheduler), p->context);
 
+      swtch(&(c->scheduler), p->context);
       switchkvm();
+      
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       c->proc = 0;
@@ -408,11 +448,11 @@ scheduler(void)
     {
       if(p->state != RUNNABLE)
         continue;
-      total_tickets += p->tickets;
+      total_tickets += p->tickets; //computing total tickets
     }
 
-    long winning_ticket = rand()%(total_tickets+1);
-
+    int winning_ticket = rand()%(total_tickets+1); //finding the winning ticket
+    
     // Loop over process table looking for process to run.
     acquire(&ptable.lock);
     for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
@@ -423,13 +463,16 @@ scheduler(void)
       if(counter < winning_ticket){
         continue;
       }
+      p->scheduled_ticks += 1; //increment the scheduled count
+      //cprintf("\ntotal tickets %d",total_tickets);
+      //cprintf("\nwinning ticket %d",winning_ticket);
+
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
       c->proc = p;
       switchuvm(p);
       p->state = RUNNING;
-      p->ticks += 1;
 
       swtch(&(c->scheduler), p->context);
       switchkvm();
@@ -443,45 +486,6 @@ scheduler(void)
   }
 }
 #endif
-
-/*
-//OLD SCHEDULER
-
-void
-scheduler(void)
-{
-  struct proc *p;
-  struct cpu *c = mycpu();
-  c->proc = 0;
-  
-  for(;;){
-    // Enable interrupts on this processor.
-    sti();
-
-    // Loop over process table looking for process to run.
-    acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
-        continue;
-
-      // Switch to chosen process.  It is the process's job
-      // to release ptable.lock and then reacquire it
-      // before jumping back to us.
-      c->proc = p;
-      switchuvm(p);
-      p->state = RUNNING;
-
-      swtch(&(c->scheduler), p->context);
-      switchkvm();
-
-      // Process is done running for now.
-      // It should have changed its p->state before coming back.
-      c->proc = 0;
-    }
-    release(&ptable.lock);
-
-  }
-}*/
 
 // Enter scheduler.  Must hold only ptable.lock
 // and have changed proc->state. Saves and restores
@@ -661,10 +665,12 @@ procdump(void)
   }
 }
 
+//cs202 lab1
 void print_hello(void){
   cprintf("Hello from the kernel space\n");
 }
 
+//cs202 lab1
 int info(int param){
   argint(0, &param);
   if(param == 1){
@@ -684,19 +690,22 @@ int info(int param){
   }
 } 
 
+//cs202 lab2
+
 void assign_tickets(int tickets){
-    argint(0, &tickets);
-    struct proc *p = myproc();
-    p->tickets = tickets;
-    p->stride = STRIDE_VAL / p->tickets;
-    p->pass = p->stride;
+  argint(0, &tickets);
+  struct proc *curproc = myproc();
+  curproc->tickets = tickets;
+  curproc->stride = STRIDE_VAL / curproc->tickets;
+  curproc->pass = curproc->stride;
 }
 
-void process_info(){
+void scheduled_count(){
+  cprintf("-----------------------------------------------\n");
   struct proc *p;
   for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-    if(p->state != UNUSED){ // get all the process that are in UNUSED state
-      cprintf("%s tickets: %d ticks: %d \n",p->name,p->tickets,p->ticks);
+    if(p->state != UNUSED){ // print all processes that are in UNUSED state
+      cprintf("%s tickets: %d ticks: %d\n",p->name,p->tickets,p->scheduled_ticks);
     }
   }
 }

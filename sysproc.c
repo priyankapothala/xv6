@@ -123,16 +123,15 @@ int sys_info(void){
 int sys_assign_tickets(void)
 {
   int tickets;
-  if(argint(0, &tickets) < 0){
+  argint(0, &tickets);
+  if(tickets < 0){
     return -1;
   }
-  else{
-    assign_tickets(tickets);
-    return 0;
-  }
+  assign_tickets(tickets);
+  return 0;
 }
 
-int sys_process_info(void){
-  process_info();
+int sys_scheduled_count(void){
+  scheduled_count();
   return 0;
 }
